@@ -6,64 +6,60 @@ import { S3Service } from '../aws/s3.service';
 import { QRCodeService } from '../qrcode/qrcode.service';
 import { MailService } from '../mail/mail.service';
 import { nanoid } from 'nanoid';
+import { CreateEventDto } from './dto/create-event.dto';
 
 @Injectable()
 export class EventsService {
   constructor(
     @InjectRepository(Event)
-    private eventRepository: Repository<Event>,
+    private eventsRepository: Repository<Event>,
     private s3Service: S3Service,
-    private qrCodeService: QRCodeService,
+    private qrcodeService: QRCodeService,
     private mailService: MailService,
   ) {}
 
-  async createEvent(eventData: Partial<Event>, hostId: string) {
-    const event = this.eventRepository.create({
-      ...eventData,
+  async createEvent(createEventDto: CreateEventDto, userId: string): Promise<Event> {
+    const event = this.eventsRepository.create({
+      ...createEventDto,
+      host: { id: userId },
       accessCode: nanoid(10),
-      host: { id: hostId },
     });
 
-    const savedEvent = await this.eventRepository.save(event);
-    
     // Generate QR code
-    const qrCodeUrl = await this.qrCodeService.generateEventQR(savedEvent.accessCode);
-    
-    return {
-      ...savedEvent,
-      qrCodeUrl,
-    };
+    const qrCode = await this.qrcodeService.generateEventQR(event.accessCode);
+    event.qrCodeUrl = qrCode;
+
+    return this.eventsRepository.save(event);
   }
 
-  async getEventByAccessCode(accessCode: string) {
-    return this.eventRepository.findOne({
+  async findOne(accessCode: string): Promise<Event> {
+    return this.eventsRepository.findOne({
       where: { accessCode },
       relations: ['host', 'photos'],
     });
   }
 
+  async shareEvent(eventId: string, email: string): Promise<void> {
+    const event = await this.eventsRepository.findOne({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      throw new Error('Event not found');
+    }
+
+    const shareUrl = `${process.env.FRONTEND_URL}/events/${event.accessCode}`;
+    await this.mailService.sendEventInvitation(email, event, shareUrl);
+  }
+
   async updateSlideshowSettings(eventId: string, settings: any) {
-    await this.eventRepository.update(eventId, {
+    await this.eventsRepository.update(eventId, {
       slideshowSettings: settings,
     });
   }
 
-  async shareEventViaEmail(eventId: string, emails: string[]) {
-    const event = await this.eventRepository.findOne({
-      where: { id: eventId },
-    });
-
-    const shareUrl = `${process.env.FRONTEND_URL}/events/${event.accessCode}`;
-    
-    await Promise.all(
-      emails.map(email =>
-        this.mailService.sendEventInvitation(email, event, shareUrl)
-      )
-    );
-  }
-
   async getEventPhotos(eventId: string) {
-    const event = await this.eventRepository.findOne({
+    const event = await this.eventsRepository.findOne({
       where: { id: eventId },
       relations: ['photos'],
     });

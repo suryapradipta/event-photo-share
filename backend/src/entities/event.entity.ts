@@ -1,15 +1,8 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, OneToMany, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { User } from './user.entity';
 import { Photo } from './photo.entity';
 import { Invitation } from './invitation.entity';
-
-export type PrivacyLevel = 'public' | 'private' | 'invite-only';
-export type SlideshowSettings = {
-  transitionEffect: string;
-  displayTime: number;
-  shuffle: boolean;
-  loop: boolean;
-};
+import { EventPrivacy } from '../modules/events/dto/create-event.dto';
 
 @Entity()
 export class Event {
@@ -30,13 +23,16 @@ export class Event {
 
   @Column({
     type: 'enum',
-    enum: ['public', 'private', 'invite-only'],
-    default: 'private'
+    enum: EventPrivacy,
+    default: EventPrivacy.PRIVATE
   })
-  privacyLevel: PrivacyLevel;
+  privacy: EventPrivacy;
 
   @Column({ unique: true })
   accessCode: string;
+
+  @Column({ nullable: true })
+  qrCodeUrl: string;
 
   @ManyToOne(() => User, user => user.events)
   host: User;
@@ -50,7 +46,12 @@ export class Event {
     shuffle: false,
     loop: true
   }})
-  slideshowSettings: SlideshowSettings;
+  slideshowSettings: {
+    transitionEffect: string;
+    displayTime: number;
+    shuffle: boolean;
+    loop: boolean;
+  };
 
   @OneToMany(() => Photo, photo => photo.event)
   photos: Photo[];
